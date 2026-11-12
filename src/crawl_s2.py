@@ -35,14 +35,19 @@ def fetch(session, arxiv_id, max_retries=6):
     return f"failed_{last}", None
 
 def load_done():
-    done = set()
+    # The JSONL is append-only, so a paper can have several attempts.
+    # Only the most recent status should decide whether it needs a retry.
+    latest = {}
     if OUT.exists():
         with open(OUT, encoding="utf-8") as f:
             for line in f:
-                rec = json.loads(line)
-                if rec["status"] in ("ok", "not_found"):   # bài failed sẽ được thử lại
-                    done.add(rec["arxiv_id"])
-    return done
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # tolerate a truncated final line after interruption
+                latest[rec["arxiv_id"]] = rec["status"]
+    return {arxiv_id for arxiv_id, status in latest.items()
+            if status in ("ok", "not_found")}
 
 if __name__ == "__main__":
     done = load_done()
